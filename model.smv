@@ -1,0 +1,87 @@
+MODULE main
+
+VAR
+    client : process user;
+    transaction : process terminal;
+    dispense_item : {NONE, SELECT_1, SELECT_2};
+    amount_1 : 0..1000;
+    amount_2 : 0..1000;
+    dispense_amount : 5..10;
+
+ASSIGN
+    init(dispense_item) := NONE;
+    init(amount_1) := 10..1000;
+    init(amount_2) := 10..1000;
+    init(dispense_amount) := 5;
+
+    next(dispense_item) := case
+        client.state = DISPENSE & client.choice = SELECT_1 & amount_1 > 0: SELECT_1;  -- Выдача товара 1
+        client.state = DISPENSE & client.choice = SELECT_2 & amount_2 > 0: SELECT_2;  -- Выдача товара 2
+        TRUE : dispense_item;  -- Сохранение выданного товара
+    esac;
+
+    next(amount_1) := case
+        client.state = DISPENSE & dispense_item = SELECT_1 & amount_1 - dispense_amount >= 0 : amount_1 - dispense_amount;  -- Уменьшаем выданный товар
+        TRUE: amount_1; -- Сохранение количества
+    esac;
+
+    next(amount_2) := case
+        client.state = DISPENSE & dispense_item = SELECT_2 & amount_2 - dispense_amount >= 0 : amount_2 - dispense_amount;  -- Уменьшаем выданный товар
+        TRUE: amount_2; -- Сохранение количества
+    esac;    
+
+-- Свойства LTL для верификации
+LTLSPEC NAME property1 := G (transaction.payment = 75 -> X (dispense_item = SELECT_1)) & (transaction.payment = 50 -> X (dispense_item = SELECT_2));
+LTLSPEC NAME property2 := G (transaction.balance >= 0);
+LTLSPEC NAME property3 := G (amount_1 >= 0 & amount_2 >= 0);
+
+FAIRNESS
+    running
+
+MODULE user
+
+VAR
+    choice : {NONE, SELECT_1, SELECT_2};
+    state : {IDLE, SELECT_1, SELECT_2, PAY, DISPENSE};
+
+ASSIGN
+    init(state) := IDLE;
+    init(choice) := NONE;
+
+    next(state) := case
+        state = IDLE : IDLE;  -- Ожидание выбора
+        state = SELECT_1 : PAY;  -- Переход к оплате
+        state = SELECT_2 : PAY;  -- Переход к оплате
+        state = PAY : DISPENSE;  -- Переход к выдаче
+        state = DISPENSE : IDLE;  -- Возврат в начальное состояние
+    esac;
+
+    next(choice) := case
+        state = IDLE & (choice = NONE) : {SELECT_1, SELECT_2};  -- Пользователь выбирает товар
+        state = SELECT_1 : SELECT_1;  -- Выбор товара 1
+        state = SELECT_2 : SELECT_2;  -- Выбор товара 2
+        TRUE : choice;  -- Сохранение выбора
+    esac;
+
+MODULE terminal
+
+VAR
+    client : process user;
+    payment : {0, 50, 75};  -- Максимальная сумма оплаты
+    balance : -100..100;  -- Средства у пользователя
+
+ASSIGN
+    init(payment) := 0;
+    init(balance) := 100;
+
+    next(payment) := case
+        client.state = PAY & client.choice = SELECT_1 : 75;  -- Оплата за товар 1
+        client.state = PAY & client.choice = SELECT_2 : 50;  -- Оплата за товар 2
+        TRUE : payment;  -- Сохранение суммы оплаты
+    esac;
+
+    next(balance) := case
+        client.state = PAY & client.choice = SELECT_1 & balance - payment >= 0 : balance - 75; -- Снимаем деньги за товар 1
+        client.state = PAY & client.choice = SELECT_2 & balance - payment >= 0 : balance - 50; -- Снимаем деньги за товар 2
+        TRUE : balance;  -- По умолчанию оставаться в текущем балансе
+    esac;
