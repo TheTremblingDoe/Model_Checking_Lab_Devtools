@@ -1,0 +1,55 @@
+dtmc
+
+const int PRICE_1 = 75;
+const int PRICE_2 = 50;
+const int DISPENSE_AMOUNT = 5;
+
+module User
+    client_choice : [0..2] init 0; // NONE=0, SELECT_1=1, SELECT_2=2
+    client_state : [0..4] init 0;  // IDLE=0, SELECT_1=1, SELECT_2=2, PAY=3, DISPENSE=4
+    
+    [user_choose] client_state=0 & client_choice=0 -> 
+        0.5:(client_choice'=1) & (client_state'=1) + 
+        0.5:(client_choice'=2) & (client_state'=2);
+
+    [user_pay] client_state=1 | client_state=2 -> (client_state'=3);
+
+    [user_dispense] client_state=3 -> (client_state'=4);
+
+    [user_reset] client_state=4 -> (client_state'=0) & (client_choice'=0);
+endmodule
+
+module Terminal
+    transaction_payment : [0..2] init 0; // 0=0, 1=50, 2=75
+    transaction_balance : [0..1000] init 100;
+    dispense_item : [0..2] init 0; // NONE=0, SELECT_1=1, SELECT_2=2
+    amount_1 : [0..100] init 100;
+    amount_2 : [0..100] init 100;
+    
+    // Обработка платежа для товара 1
+    [terminal_pay] client_state=3 & client_choice=1 & 
+                   transaction_balance>=PRICE_1 & amount_1>=DISPENSE_AMOUNT -> 
+        (transaction_payment'=2) & (transaction_balance'=transaction_balance-PRICE_1);
+
+    // Обработка платежа для товара 2
+    [terminal_pay] client_state=3 & client_choice=2 & 
+                   transaction_balance>=PRICE_2 & amount_2>=DISPENSE_AMOUNT -> 
+        (transaction_payment'=1) & (transaction_balance'=transaction_balance-PRICE_2);
+
+        // Обработка неудачного платежа (исправленная версия)
+    [terminal_pay] client_state=3 & 
+                 ((client_choice=1 & (transaction_balance<PRICE_1 | amount_1<DISPENSE_AMOUNT)) | 
+                  (client_choice=2 & (transaction_balance<PRICE_2 | amount_2<DISPENSE_AMOUNT))) -> 
+        (transaction_payment'=transaction_payment) & (transaction_balance'=transaction_balance);
+
+    // Выдача товара (исправленная версия)
+    [dispense] client_state=4 & transaction_payment=2 -> (dispense_item'=1) & 
+                                 (amount_1'=amount_1-DISPENSE_AMOUNT) & 
+                                 (transaction_payment'=0);
+    [dispense] client_state=4 &transaction_payment=1 -> (dispense_item'=2) & 
+                                 (amount_2'=amount_2-DISPENSE_AMOUNT) & 
+                                 (transaction_payment'=0);
+
+    // Сброс после выдачи
+    [user_reset] client_state=4 -> (dispense_item'=0);
+endmodule
