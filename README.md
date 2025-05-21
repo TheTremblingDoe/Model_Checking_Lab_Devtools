@@ -1,4 +1,4 @@
-# Лабораторная работа "Сравнение методов моделирования и верификации в nuXmv и SPIN"
+# Лабораторная работа "Сравнение методов моделирования и верификации в nuXmv, SPIN, TLA+ и PRISM"
 
 ![Главный герой моделей в репозитории.](https://github.com/TheTremblingDoe/Model_Checking_Lab_Devtools/blob/main/photo_2025-04-09_23-11-51.jpg)
 
